@@ -2,6 +2,8 @@
 
 Avatar creation for VRChat in Unity using agentic coding tools.
 
+My blog post about it: https://sentfromspace.xyz/blog/claude-vrchat-avatar/
+
 ## Setup
 
 1. Download the `.zip` from this GitHub repository
