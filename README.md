@@ -13,6 +13,7 @@ My blog post about it: https://sentfromspace.xyz/blog/claude-vrchat-avatar/
 ## Supported Agents
 - [Claude Code](https://code.claude.com/docs/en/overview) (Anthropic)
 - [Codex](https://developers.openai.com/codex/cli/) (OpenAI)
+- [GitHub Copilot in VS Code](https://code.visualstudio.com/docs/copilot/overview) (Anthropic / OpenAI / Google)
 
 Or any other capable coding agent with MCP support
 
@@ -25,12 +26,39 @@ Or any other capable coding agent with MCP support
 
 **Agent configs**:
 - `AGENTS.md` / `CLAUDE.md` — detailed instructions for AI agents covering VRChat SDK, VRCFury, Poiyomi, avatar workflows, and Unity conventions
-- `.mcp.json` — MCP server config for Claude Code
-- `.codex/` — MCP server config for Codex
+- `.mcp.json` — MCP server config for Claude Code (auto-generated on first run)
+- `.codex/config.toml` — MCP server config for Codex (auto-generated if `.codex/` exists; create the directory first if needed)
+- `.vscode/mcp.json` — MCP server config for GitHub Copilot in VS Code (auto-generated if `.vscode/` exists)
 
 ## MCP Server
 
-The Unity package includes a built-in MCP server (`UnityMcpBridge`) that starts automatically when the Unity Editor loads — no external process or dependency needed. It listens on `http://127.0.0.1:14523/mcp/` using Streamable HTTP transport and exposes a single tool: `execute_csharp`, which compiles and runs C# snippets on the Unity main thread with access to all loaded assemblies (Unity, VRC SDK, VRCFury, project scripts). The `.mcp.json` and `.codex/config.toml` files point Claude Code and Codex to this local server.
+The Unity package includes a built-in MCP server (`UnityMcpBridge`) that starts automatically when the Unity Editor loads. No external process, dependency, or manual configuration needed.
+
+On startup the server:
+1. Binds to a dynamic port (tries the previous port, falls back to 14523, then OS-assigned)
+2. Compiles a lightweight stdio proxy (`Library/mcp-proxy.exe`) that bridges MCP clients to the HTTP server
+3. Auto-generates MCP config files:
+   - `.mcp.json` for Claude Code
+   - `.vscode/mcp.json` for GitHub Copilot in VS Code (only if `.vscode/` already exists)
+   - `.codex/config.toml` for Codex (only if `.codex/` already exists)
+
+The proxy reads the port from `Library/MCP_PORT` at runtime, so config files stay the same even if the port changes. It also retries during Unity domain reloads (Play Mode, script recompilation), keeping the connection alive.
+
+Multiple Unity projects can run simultaneously since each gets its own port. The server identifies itself as `unity-<ProjectFolder>` so clients can tell them apart.
+
+Generated `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "unity": {
+      "type": "stdio",
+      "command": "Library/mcp-proxy.exe"
+    }
+  }
+}
+```
+
+The server exposes a single tool, `execute_csharp`, which compiles and runs C# snippets on the Unity main thread with access to all loaded assemblies (Unity, VRC SDK, VRCFury, project scripts).
 
 ## Third-Party Package Support
 

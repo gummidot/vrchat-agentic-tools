@@ -3,6 +3,7 @@ using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -15,8 +16,10 @@ namespace SentFromSpace.AgenticTools.Editor
     [InitializeOnLoad]
     public static class UnityMcpBridge
     {
-        const int Port = 14523;
-        const string Prefix = "http://127.0.0.1:14523/mcp/";
+        const int DefaultPort = 14523;
+        static int s_Port;
+        static string s_Prefix;
+        static volatile bool s_Quitting;
         const int ExecutionTimeoutMs = 30000;
         const string ProtocolVersion = "2025-03-26";
 
@@ -58,10 +61,204 @@ public static class SnippetRunner
             public ManualResetEventSlim Done = new ManualResetEventSlim(false);
         }
 
+        static string PortFilePath => Path.Combine(Path.GetDirectoryName(Application.dataPath), "Library", "MCP_PORT");
+        static string ProxyExePath => Path.Combine(Path.GetDirectoryName(Application.dataPath), "Library", "mcp-proxy.exe");
+
+        // Version stamp embedded in compiled proxy -- bump to force recompile
+        const string ProxyVersion = "2";
+
+        const string ProxySource = @"
+using System;
+using System.IO;
+using System.Net;
+using System.Text;
+using System.Threading;
+
+class McpProxy
+{
+    const string Version = """ + ProxyVersion + @""";
+    const int MaxRetries = 40;       // 40 x 1.5s = 60s max wait for domain reload
+    const int RetryDelayMs = 1500;
+
+    static int Main(string[] args)
+    {
+        if (args.Length > 0 && args[0] == ""--version"")
+        {
+            Console.WriteLine(Version);
+            return 0;
+        }
+
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string portFile = Path.Combine(baseDir, ""MCP_PORT"");
+
+        var stderr = Console.Error;
+        var stdout = Console.OpenStandardOutput();
+        var stdin = Console.OpenStandardInput();
+
+        string sessionId = null;
+
+        while (true)
+        {
+            // Read one JSON-RPC message from stdin (newline-delimited)
+            string line;
+            try
+            {
+                line = ReadLine(stdin);
+            }
+            catch
+            {
+                break;
+            }
+            if (line == null) break;
+            if (line.Trim().Length == 0) continue;
+
+            // Retry loop: Unity may be unreachable during domain reloads
+            // (Play Mode transitions, script recompilation)
+            bool handled = false;
+            for (int attempt = 0; attempt <= MaxRetries; attempt++)
+            {
+                // Resolve port on each attempt (Unity may restart with a new port)
+                string port;
+                try
+                {
+                    port = File.ReadAllText(portFile).Trim();
+                }
+                catch
+                {
+                    if (attempt < MaxRetries)
+                    {
+                        Thread.Sleep(RetryDelayMs);
+                        continue;
+                    }
+                    WriteStdout(stdout, MakeError(line, -32000, ""Unity is not running (no Library/MCP_PORT file)""));
+                    handled = true;
+                    break;
+                }
+
+                string url = ""http://127.0.0.1:"" + port + ""/mcp/"";
+
+                try
+                {
+                    var req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Method = ""POST"";
+                    req.ContentType = ""application/json"";
+                    req.Timeout = 60000;
+                    if (sessionId != null)
+                        req.Headers[""Mcp-Session-Id""] = sessionId;
+
+                    byte[] body = Encoding.UTF8.GetBytes(line);
+                    req.ContentLength = body.Length;
+                    using (var s = req.GetRequestStream())
+                        s.Write(body, 0, body.Length);
+
+                    using (var resp = (HttpWebResponse)req.GetResponse())
+                    {
+                        string sid = resp.Headers[""Mcp-Session-Id""];
+                        if (sid != null) sessionId = sid;
+
+                        if ((int)resp.StatusCode == 202)
+                        {
+                            handled = true;
+                            break; // notification acknowledged, no response
+                        }
+
+                        using (var reader = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                        {
+                            WriteStdout(stdout, reader.ReadToEnd());
+                            handled = true;
+                            break;
+                        }
+                    }
+                }
+                catch (WebException we)
+                {
+                    var httpResp = we.Response as HttpWebResponse;
+                    if (httpResp != null)
+                    {
+                        // Got an HTTP response (real error, not a connection failure)
+                        using (var reader = new StreamReader(httpResp.GetResponseStream(), Encoding.UTF8))
+                        {
+                            WriteStdout(stdout, reader.ReadToEnd());
+                            handled = true;
+                            break;
+                        }
+                    }
+
+                    // Connection refused / timed out -- Unity is likely reloading
+                    if (attempt < MaxRetries)
+                    {
+                        if (attempt == 0)
+                            stderr.WriteLine(""[mcp-proxy] Unity unreachable, waiting for domain reload..."");
+                        Thread.Sleep(RetryDelayMs);
+                        continue;
+                    }
+
+                    WriteStdout(stdout, MakeError(line, -32000, ""Cannot reach Unity at "" + url + "" after "" + (MaxRetries + 1) + "" attempts: "" + we.Message));
+                    handled = true;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    WriteStdout(stdout, MakeError(line, -32603, ex.Message));
+                    handled = true;
+                    break;
+                }
+            }
+
+            if (!handled)
+            {
+                WriteStdout(stdout, MakeError(line, -32000, ""Unity is not running""));
+            }
+        }
+        return 0;
+    }
+
+    static string ReadLine(Stream stdin)
+    {
+        var sb = new StringBuilder();
+        int b;
+        while ((b = stdin.ReadByte()) >= 0)
+        {
+            if (b == '\n') return sb.ToString();
+            if (b != '\r') sb.Append((char)b);
+        }
+        return sb.Length > 0 ? sb.ToString() : null;
+    }
+
+    static void WriteStdout(Stream stdout, string msg)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(msg + ""\n"");
+        stdout.Write(bytes, 0, bytes.Length);
+        stdout.Flush();
+    }
+
+    static string MakeError(string request, int code, string message)
+    {
+        // Extract id from request
+        string id = ""null"";
+        int idx = request.IndexOf(""\""id\"""");
+        if (idx >= 0)
+        {
+            int colon = request.IndexOf(':', idx + 4);
+            if (colon >= 0)
+            {
+                int start = colon + 1;
+                while (start < request.Length && request[start] == ' ') start++;
+                int end = start;
+                while (end < request.Length && request[end] != ',' && request[end] != '}') end++;
+                id = request.Substring(start, end - start).Trim();
+            }
+        }
+        message = message.Replace(""\\"", ""\\\\"").Replace(""\"""", ""\\\"""");
+        return ""{\""jsonrpc\"":\""2.0\"",\""id\"":"" + id + "",\""error\"":{\""code\"":"" + code + "",\""message\"":"" + ""\"""" + message + ""\"""" + ""}}"";
+    }
+}
+";
+
         static UnityMcpBridge()
         {
             AssemblyReloadEvents.beforeAssemblyReload += StopServer;
-            EditorApplication.quitting += StopServer;
+            EditorApplication.quitting += OnQuitting;
             EditorApplication.update += ProcessQueue;
             StartServer();
         }
@@ -72,12 +269,28 @@ public static class SnippetRunner
 
             try
             {
-                s_Listener = new HttpListener();
-                s_Listener.Prefixes.Add(Prefix);
-                s_Listener.Start();
+                // Try ports in order: sticky port from last session, default, then OS-assigned
+                if (!TryStartWithStickyPort() && !TryStartListener(DefaultPort))
+                {
+                    // All preferred ports taken -- let OS assign one
+                    var tcp = new TcpListener(IPAddress.Loopback, 0);
+                    tcp.Start();
+                    s_Port = ((IPEndPoint)tcp.LocalEndpoint).Port;
+                    tcp.Stop();
+                    if (!TryStartListener(s_Port))
+                    {
+                        Debug.LogError("[MCP] Failed to start: could not bind to any port");
+                        return;
+                    }
+                }
+
+                s_Prefix = $"http://127.0.0.1:{s_Port}/mcp/";
                 s_Running = true;
                 s_SessionId = null;
                 s_CachedAssemblyPaths = null;
+
+                try { File.WriteAllText(PortFilePath, s_Port.ToString()); }
+                catch (Exception e) { Debug.LogWarning($"[MCP] Could not write port file: {e.Message}"); }
 
                 s_ListenerThread = new Thread(ListenerLoop)
                 {
@@ -85,11 +298,35 @@ public static class SnippetRunner
                     Name = "MCP-Listener"
                 };
                 s_ListenerThread.Start();
-                Debug.Log($"[MCP] Listening on {Prefix}");
+                Debug.Log($"[MCP] Listening on {s_Prefix}");
+
+                try { CompileProxy(); }
+                catch (Exception e) { Debug.LogWarning($"[MCP] Could not compile stdio proxy: {e.Message}"); }
+
+                try { UpdateMcpConfigs(s_Port); }
+                catch (Exception e) { Debug.LogWarning($"[MCP] Could not update config files: {e.Message}\n{e.StackTrace}"); }
             }
             catch (Exception e)
             {
                 Debug.LogError($"[MCP] Failed to start: {e.Message}");
+            }
+        }
+
+        static bool TryStartListener(int port)
+        {
+            try
+            {
+                s_Listener = new HttpListener();
+                s_Listener.Prefixes.Add($"http://127.0.0.1:{port}/mcp/");
+                s_Listener.Start();
+                s_Port = port;
+                return true;
+            }
+            catch
+            {
+                try { s_Listener?.Close(); } catch { }
+                s_Listener = null;
+                return false;
             }
         }
 
@@ -101,6 +338,371 @@ public static class SnippetRunner
             s_SessionId = null;
             s_CachedAssemblyPaths = null;
             s_CachedAssemblyCount = 0;
+
+            if (s_Quitting)
+            {
+                try { File.Delete(PortFilePath); } catch { }
+            }
+        }
+
+        static void OnQuitting()
+        {
+            s_Quitting = true;
+            StopServer();
+        }
+
+        // ── Stdio proxy compilation ─────────────────────────────────────
+
+        static void CompileProxy()
+        {
+            // Check if existing proxy is current version
+            if (File.Exists(ProxyExePath))
+            {
+                try
+                {
+                    var versionInfo = System.Diagnostics.FileVersionInfo.GetVersionInfo(ProxyExePath);
+                    // Re-check by running --version (lightweight)
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = ProxyExePath,
+                        Arguments = "--version",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true
+                    };
+                    using (var proc = System.Diagnostics.Process.Start(psi))
+                    {
+                        string output = proc.StandardOutput.ReadToEnd().Trim();
+                        proc.WaitForExit(3000);
+                        if (output == ProxyVersion)
+                            return; // Already up to date
+                    }
+                }
+                catch { } // Fall through to recompile
+            }
+
+            var provider = new CSharpCodeProvider();
+            var parameters = new CompilerParameters
+            {
+                GenerateExecutable = true,
+                OutputAssembly = ProxyExePath,
+                GenerateInMemory = false,
+                TreatWarningsAsErrors = false,
+                CompilerOptions = "/optimize /platform:anycpu"
+            };
+            parameters.ReferencedAssemblies.Add("System.dll");
+
+            CompilerResults results = provider.CompileAssemblyFromSource(parameters, ProxySource);
+            if (results.Errors.HasErrors)
+            {
+                var sb = new StringBuilder("[MCP] Failed to compile stdio proxy:\n");
+                foreach (CompilerError err in results.Errors)
+                    if (!err.IsWarning) sb.AppendLine($"  Line {err.Line}: {err.ErrorText}");
+                Debug.LogError(sb.ToString());
+            }
+            else
+            {
+                Debug.Log($"[MCP] Compiled stdio proxy to {ProxyExePath}");
+            }
+        }
+
+        // ── Port discovery ──────────────────────────────────────────────
+
+        static bool TryStartWithStickyPort()
+        {
+            try
+            {
+                if (File.Exists(PortFilePath))
+                {
+                    string content = File.ReadAllText(PortFilePath).Trim();
+                    if (int.TryParse(content, out int stickyPort) && stickyPort > 0 && stickyPort <= 65535)
+                        return TryStartListener(stickyPort);
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        // ── MCP config file management ──────────────────────────────────
+
+        static void UpdateMcpConfigs(int port)
+        {
+            string projectRoot = Path.GetDirectoryName(Application.dataPath);
+
+            // .mcp.json (Claude Code, other agents) -- uses "mcpServers" key
+            string mcpJsonPath = Path.Combine(projectRoot, ".mcp.json");
+            if (File.Exists(ProxyExePath))
+                UpdateStdioConfigFile(mcpJsonPath, "mcpServers");
+            else
+                UpdateConfigFile(mcpJsonPath, "mcpServers", port);
+
+            // .vscode/mcp.json (VS Code Copilot) -- uses "servers" key
+            string vscodePath = Path.Combine(projectRoot, ".vscode", "mcp.json");
+            if (File.Exists(vscodePath) || Directory.Exists(Path.Combine(projectRoot, ".vscode")))
+            {
+                if (File.Exists(ProxyExePath))
+                    UpdateStdioConfigFile(vscodePath, "servers");
+                else
+                    UpdateConfigFile(vscodePath, "servers", port);
+            }
+
+            // .codex/config.toml (Codex) -- only if .codex/ directory exists
+            string codexDir = Path.Combine(projectRoot, ".codex");
+            if (Directory.Exists(codexDir))
+            {
+                string codexPath = Path.Combine(codexDir, "config.toml");
+                if (File.Exists(ProxyExePath))
+                    UpdateCodexConfig(codexPath, "Library/mcp-proxy.exe");
+                else
+                    UpdateCodexConfig(codexPath, null, port);
+            }
+        }
+
+        static void UpdateStdioConfigFile(string filePath, string defaultServersKey)
+        {
+            // Use forward slashes and relative path for cross-platform compat in JSON
+            string proxyRelative = "Library/mcp-proxy.exe";
+            string unityBlock = "{\n      \"type\": \"stdio\",\n      \"command\": \"" + proxyRelative + "\"\n    }";
+
+            if (!File.Exists(filePath))
+            {
+                var dir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                File.WriteAllText(filePath,
+                    "{\n  \"" + defaultServersKey + "\": {\n    \"unity\": " + unityBlock + "\n  }\n}\n");
+                Debug.Log($"[MCP] Created {filePath} (stdio)");
+                return;
+            }
+
+            string text = File.ReadAllText(filePath);
+
+            // Already up to date?
+            if (text.Contains(proxyRelative)) return;
+
+            // Determine which servers key the file uses
+            string serversKey = null;
+            if (FindJsonKey(text, "mcpServers") >= 0) serversKey = "mcpServers";
+            else if (FindJsonKey(text, "servers") >= 0) serversKey = "servers";
+
+            // Reuse the same merge logic as HTTP config
+            int unityKeyIdx = FindJsonKey(text, "unity");
+            if (unityKeyIdx >= 0)
+            {
+                int colonIdx = text.IndexOf(':', unityKeyIdx + "\"unity\"".Length);
+                if (colonIdx >= 0)
+                {
+                    int openBrace = text.IndexOf('{', colonIdx);
+                    if (openBrace >= 0)
+                    {
+                        int closeBrace = FindMatchingBrace(text, openBrace);
+                        if (closeBrace >= 0)
+                        {
+                            text = text.Substring(0, openBrace) + unityBlock + text.Substring(closeBrace + 1);
+                            File.WriteAllText(filePath, text);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if (serversKey != null)
+            {
+                int sKeyIdx = FindJsonKey(text, serversKey);
+                int sColon = text.IndexOf(':', sKeyIdx + serversKey.Length + 2);
+                if (sColon >= 0)
+                {
+                    int sOpen = text.IndexOf('{', sColon);
+                    if (sOpen >= 0)
+                    {
+                        int sClose = FindMatchingBrace(text, sOpen);
+                        if (sClose >= 0)
+                        {
+                            int insertPos = sClose;
+                            while (insertPos > sOpen + 1 && char.IsWhiteSpace(text[insertPos - 1]))
+                                insertPos--;
+                            bool hasEntries = text.Substring(sOpen + 1, insertPos - sOpen - 1).Trim().Length > 0;
+                            string comma = hasEntries ? "," : "";
+                            text = text.Substring(0, insertPos) + comma
+                                + "\n    \"unity\": " + unityBlock + "\n  " + text.Substring(sClose);
+                            File.WriteAllText(filePath, text);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            Debug.LogWarning($"[MCP] Could not update {filePath} - unrecognized format");
+        }
+
+        static void UpdateConfigFile(string filePath, string defaultServersKey, int port)
+        {
+            string url = $"http://127.0.0.1:{port}/mcp/";
+            string unityBlock = "{\n      \"type\": \"http\",\n      \"url\": \"" + url + "\"\n    }";
+
+            if (!File.Exists(filePath))
+            {
+                var dir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                File.WriteAllText(filePath,
+                    "{\n  \"" + defaultServersKey + "\": {\n    \"unity\": " + unityBlock + "\n  }\n}\n");
+                Debug.Log($"[MCP] Created {filePath}");
+                return;
+            }
+
+            string text = File.ReadAllText(filePath);
+
+            // Already up to date?
+            if (text.Contains(url))
+            {
+                Debug.Log($"[MCP] {filePath} already up to date");
+                return;
+            }
+
+            // Determine which servers key the file uses
+            string serversKey = null;
+            if (FindJsonKey(text, "mcpServers") >= 0) serversKey = "mcpServers";
+            else if (FindJsonKey(text, "servers") >= 0) serversKey = "servers";
+
+            // Has "unity" key (as a JSON key, not value)? Replace its value block
+            int unityKeyIdx = FindJsonKey(text, "unity");
+            if (unityKeyIdx >= 0)
+            {
+                int colonIdx = text.IndexOf(':', unityKeyIdx + "\"unity\"".Length);
+                if (colonIdx >= 0)
+                {
+                    int openBrace = text.IndexOf('{', colonIdx);
+                    if (openBrace >= 0)
+                    {
+                        int closeBrace = FindMatchingBrace(text, openBrace);
+                        if (closeBrace >= 0)
+                        {
+                            text = text.Substring(0, openBrace) + unityBlock + text.Substring(closeBrace + 1);
+                            File.WriteAllText(filePath, text);
+                            Debug.Log($"[MCP] Updated {filePath}");
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Has servers key but no "unity"? Insert
+            if (serversKey != null)
+            {
+                int sKeyIdx = FindJsonKey(text, serversKey);
+                int sColon = text.IndexOf(':', sKeyIdx + serversKey.Length + 2);
+                if (sColon >= 0)
+                {
+                    int sOpen = text.IndexOf('{', sColon);
+                    if (sOpen >= 0)
+                    {
+                        int sClose = FindMatchingBrace(text, sOpen);
+                        if (sClose >= 0)
+                        {
+                            // Insert before closing brace, after last entry
+                            int insertPos = sClose;
+                            while (insertPos > sOpen + 1 && char.IsWhiteSpace(text[insertPos - 1]))
+                                insertPos--;
+                            bool hasEntries = text.Substring(sOpen + 1, insertPos - sOpen - 1).Trim().Length > 0;
+                            string comma = hasEntries ? "," : "";
+                            text = text.Substring(0, insertPos) + comma
+                                + "\n    \"unity\": " + unityBlock + "\n  " + text.Substring(sClose);
+                            File.WriteAllText(filePath, text);
+                            Debug.Log($"[MCP] Updated {filePath} (inserted unity entry)");
+                            return;
+                        }
+                    }
+                }
+            }
+
+            Debug.LogWarning($"[MCP] Could not update {filePath} - unrecognized format. Set unity server URL to {url}");
+        }
+
+        static void UpdateCodexConfig(string filePath, string proxyCommand, int port = 0)
+        {
+            string sectionHeader = "[mcp_servers.unity]";
+            string newSection;
+            if (proxyCommand != null)
+                newSection = sectionHeader + "\ncommand = \"" + proxyCommand + "\"";
+            else
+                newSection = sectionHeader + "\nurl = \"http://127.0.0.1:" + port + "/mcp/\"";
+
+            if (!File.Exists(filePath))
+            {
+                File.WriteAllText(filePath, newSection + "\n");
+                Debug.Log($"[MCP] Created {filePath}");
+                return;
+            }
+
+            string text = File.ReadAllText(filePath);
+
+            // Already up to date?
+            if (proxyCommand != null && text.Contains(proxyCommand)) return;
+            if (proxyCommand == null && text.Contains($"http://127.0.0.1:{port}/mcp/")) return;
+
+            // Find and replace existing [mcp_servers.unity] section
+            int sectionIdx = text.IndexOf(sectionHeader);
+            if (sectionIdx >= 0)
+            {
+                // Find end of section: next [section] header or end of file
+                int nextSection = text.IndexOf("\n[", sectionIdx + sectionHeader.Length);
+                int sectionEnd = nextSection >= 0 ? nextSection : text.Length;
+                // Trim trailing whitespace before next section
+                while (sectionEnd > sectionIdx && sectionEnd - 1 >= 0 && text[sectionEnd - 1] == '\n')
+                    sectionEnd--;
+                text = text.Substring(0, sectionIdx) + newSection + text.Substring(sectionEnd);
+                File.WriteAllText(filePath, text);
+                Debug.Log($"[MCP] Updated {filePath}");
+                return;
+            }
+
+            // No existing unity section -- append
+            if (!text.EndsWith("\n")) text += "\n";
+            text += "\n" + newSection + "\n";
+            File.WriteAllText(filePath, text);
+            Debug.Log($"[MCP] Updated {filePath} (appended unity section)");
+        }
+
+        /// <summary>Find a JSON key (followed by ':') in text. Returns index or -1.</summary>
+        static int FindJsonKey(string text, string key, int searchFrom = 0)
+        {
+            string pattern = "\"" + key + "\"";
+            int idx = searchFrom;
+            while (idx < text.Length)
+            {
+                idx = text.IndexOf(pattern, idx);
+                if (idx < 0) return -1;
+                int afterKey = idx + pattern.Length;
+                while (afterKey < text.Length && char.IsWhiteSpace(text[afterKey])) afterKey++;
+                if (afterKey < text.Length && text[afterKey] == ':')
+                    return idx;
+                idx += pattern.Length;
+            }
+            return -1;
+        }
+
+        /// <summary>Find the closing '}' that matches the opening '{' at the given index.</summary>
+        static int FindMatchingBrace(string text, int openBraceIdx)
+        {
+            int depth = 1;
+            bool inString = false;
+            for (int i = openBraceIdx + 1; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (inString)
+                {
+                    if (c == '\\') { i++; continue; }
+                    if (c == '"') inString = false;
+                }
+                else
+                {
+                    if (c == '"') inString = true;
+                    else if (c == '{') depth++;
+                    else if (c == '}') { depth--; if (depth == 0) return i; }
+                }
+            }
+            return -1;
         }
 
         static void ListenerLoop()
@@ -430,10 +1032,11 @@ public static class SnippetRunner
 
         static string MakeInitializeResponse(string rawId)
         {
+            string projectName = JsonEscape(Path.GetFileName(Path.GetDirectoryName(Application.dataPath)));
             return "{\"jsonrpc\":\"2.0\",\"id\":" + Id(rawId)
                 + ",\"result\":{\"protocolVersion\":\"" + ProtocolVersion
                 + "\",\"capabilities\":{\"tools\":{}}"
-                + ",\"serverInfo\":{\"name\":\"unity\",\"version\":\"1.0.0\"}}}";
+                + ",\"serverInfo\":{\"name\":\"unity-" + projectName + "\",\"version\":\"1.0.0\"}}}";
         }
 
         static string MakeToolsListResponse(string rawId)
