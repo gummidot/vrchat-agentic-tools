@@ -24,10 +24,42 @@ Or any other capable coding agent with MCP support
 - **AvatarTypeChecker** — post-build static analysis for avatar validation (broken animation paths, parameter mismatches, material issues)
 - **GestureManagerVerifier** — runtime toggle verification using Gesture Manager
 
-**Agent configs**:
-- `AGENTS.md` / `CLAUDE.md` — detailed instructions for AI agents covering VRChat SDK, VRCFury, Poiyomi, avatar workflows, and Unity conventions
-- `.mcp.json` — MCP server config for Claude Code, VS Code (Copilot), and other agents (auto-generated on first run)
-- `.codex/config.toml` — MCP server config for Codex (auto-generated if `.codex/` exists; create the directory first if needed)
+**Agent instructions** (`Packages/xyz.sentfromspace.agentic-tools/Docs/`):
+- `INDEX.md` — core rules (MCP bridge, scene exploration, Unity conventions) + reference table pointing to topic docs
+- `vrc-avatars.md` — playable layers, expressions, toggles, audit workflows, post-build verification
+- `vrcfury.md` — VRCFury component scanning, build verification, public API
+- `poiyomi.md` — shader property discovery, module configuration, locking lifecycle
+- `physbones.md` — PhysBone setup, colliders, SDK samples
+- `vrc-worlds.md` — world-specific guidance (stub, planned)
+
+**MCP configs** (auto-generated on first run):
+- `.mcp.json` — MCP server config for Claude Code, VS Code (Copilot), and other agents
+- `.codex/config.toml` — MCP server config for Codex (only if `.codex/` exists; create the directory first if needed)
+
+## Agent Instructions Setup
+
+The package includes reference docs that teach AI agents how to work with VRChat avatars, VRCFury, Poiyomi, and the verification tools. To activate them, add a one-line pointer in your project root:
+
+**Claude Code** — create or edit `CLAUDE.md`:
+```md
+@Packages/xyz.sentfromspace.agentic-tools/Docs/INDEX.md
+```
+The `@` import inlines the doc index. You can add your own project-specific instructions below it.
+
+**Other agents (Codex, Copilot, Cursor, etc.)** — create or edit `AGENTS.md`:
+```md
+Read `Packages/xyz.sentfromspace.agentic-tools/Docs/INDEX.md` for project instructions and reference doc pointers.
+```
+AGENTS.md doesn't support `@` imports, so the agent reads the file on demand.
+
+**Both files can coexist.** If you use multiple agents, create both. Add project-specific instructions after the pointer line in either file:
+```md
+@Packages/xyz.sentfromspace.agentic-tools/Docs/INDEX.md
+
+## My Project
+- Avatar uses VRCFury for all toggles
+- Custom shaders in Assets/Shaders/
+```
 
 ## MCP Server
 

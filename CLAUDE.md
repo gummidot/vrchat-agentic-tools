@@ -1,1 +1,1 @@
-@AGENTS.md
+@Packages/xyz.sentfromspace.agentic-tools/Docs/INDEX.md
