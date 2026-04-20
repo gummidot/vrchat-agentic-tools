@@ -8,6 +8,20 @@ The VRChat Avatar SDK is located at:
 - Packages/com.vrchat.base
 - Packages/com.vrchat.avatars
 
+**VRChat SDK docs:** Detect the installed SDK version from `Packages/com.vrchat.base/package.json` (`version` field). If the version contains "beta" (e.g., `3.8.2-beta.1`), use the beta docs. Otherwise use the release docs.
+
+- **Beta SDK:** https://vrc-beta-docs.netlify.app/avatars/
+- **Release SDK:** https://creators.vrchat.com/avatars/
+- **SDK release notes:** https://creators.vrchat.com/releases/
+
+Key pages for avatar work (substitute the base URL accordingly):
+- Avatars overview (`/avatars`) -- AV3 concepts, playable layers, Write Defaults, visemes, eye simulation
+- Avatar components (`/avatars/avatar-components`) -- PhysBones, Contacts, Constraints, Raycast, Head Chop
+- Expression Menu & Controls (`/avatars/expression-menu-and-controls`) -- menus, parameters, control types
+- Animator parameters (`/avatars/animator-parameters`) -- built-in parameters and sync types
+- Performance ranking (`/avatars/avatar-performance-ranking-system`) -- performance limits and rankings
+- PhysBones (`/common-components/physbones`), Contacts (`/common-components/contacts`), Constraints (`/common-components/constraints`) -- detailed component docs
+
 ## VRC SDK Notes
 
 The VRC SDK ships as compiled DLLs — no readable C# source for components.
@@ -83,6 +97,8 @@ Present findings grouped by category. Flag potential issues: high PhysBone count
 ### Expression Parameters
 
 Types: Bool=1bit, Int=8bits (0-255), Float=8bits (-1.0 to 1.0). **Synced budget: 256 bits.**
+
+**Serialized `valueType` enum:** Int=0, Float=1, Bool=2. Note the non-obvious ordering: Float is 1, not 2. When reading `.asset` YAML files, `valueType: 1` means Float, not Int.
 
 Create via `ScriptableObject.CreateInstance<VRCExpressionParameters>()`. The `.parameters` field is an array of `Parameter` with fields: `name` (string), `valueType` (Bool/Int/Float), `defaultValue`, `saved`, `networkSynced`.
 
