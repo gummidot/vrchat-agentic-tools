@@ -66,6 +66,29 @@ Prefer specific actions (ObjectToggleAction, BlendShapeAction, MaterialAction, e
 
 When using `hasTransition = true`, **the ON state (`state.actions`) must not be empty** — VRCFury uses it for resting state registration, WD ON defaults, and `expandIntoTransition`. Read `Editor/VF/Feature/ToggleBuilder.cs` for the full state machine structure.
 
+## Parameter Type Matching
+
+A VRCFury Toggle (non-slider, `slider: 0`) creates a **Bool** parameter. If a FullController on the same prefab references a `VRCExpressionParameters` asset that declares the same parameter name as **Float**, the build will fail with: *"parameter already exists with type Float"*. Ensure the expression parameter type matches the VRCFury component that owns it: Bool for non-slider Toggles, Float for Radial Puppets and slider Toggles.
+
+## Unsynced (Local) Parameters via FullController
+
+For features that don't need network sync (local-only toggles, personal effects), use unsynced parameters to avoid consuming the 256-bit synced budget.
+
+**Pattern:**
+
+1. **LocalParams asset:** Create a `VRCExpressionParameters` ScriptableObject with each parameter set to `networkSynced: 0` and `saved: 1`.
+
+   `defaultValue` for slider Toggle parameters **must be 0**. The parameter represents blend weight (0-1), not the shader property value. At slider=0 with Write Defaults ON, the shader property reverts to its own default. At slider=1, the animation clip value applies.
+
+2. **FullController component:** Add a VRCFury FullController to the prefab with:
+   - `prms` array referencing the LocalParams asset
+   - `globalParams: ['*']` -- makes all params in the asset global (bypasses VRCFury prefix scoping)
+   - No controllers or menus needed if only declaring params
+
+3. **Global param names:** Use `useGlobalParam = true` on each Toggle/Radial with a namespaced name (e.g., `MyPrefab/FeatureToggle`). This is separate from the expression menu path.
+
+See **Parameter Type Matching** above for type alignment between LocalParams and VRCFury components.
+
 ## Animation Binding Paths in VRCFury Prefabs
 
 Animation clips in VRCFury prefabs use paths **relative to the prefab root**, not the avatar root. VRCFury automatically rewrites these paths during build based on where the prefab is placed in the avatar hierarchy. Do not use the full avatar hierarchy path in authoring-time clips.
