@@ -257,6 +257,12 @@ class McpProxy
 
         static UnityMcpBridge()
         {
+            // Asset Import Workers are separate processes that also run
+            // [InitializeOnLoad] — don't start MCP in them or they'll
+            // overwrite Library/MCP_PORT with their own ephemeral port.
+            if (AssetDatabase.IsAssetImportWorkerProcess())
+                return;
+
             AssemblyReloadEvents.beforeAssemblyReload += StopServer;
             EditorApplication.quitting += OnQuitting;
             EditorApplication.update += ProcessQueue;
