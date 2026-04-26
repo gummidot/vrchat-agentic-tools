@@ -78,7 +78,7 @@ For features that don't need network sync (local-only toggles, personal effects)
 
 1. **LocalParams asset:** Create a `VRCExpressionParameters` ScriptableObject with each parameter set to `networkSynced: 0` and `saved: 1`.
 
-   `defaultValue` for slider Toggle parameters **must be 0**. The parameter represents blend weight (0-1), not the shader property value. At slider=0 with Write Defaults ON, the shader property reverts to its own default. At slider=1, the animation clip value applies.
+   `defaultValue` is the saved parameter's resting position. The valid range/meaning depends on the Toggle's clip shape -- see **Slider Toggle Clip Semantics** below. For non-slider Toggles (Bool params), use 0 (off) or 1 (on).
 
 2. **FullController component:** Add a VRCFury FullController to the prefab with:
    - `prms` array referencing the LocalParams asset
@@ -88,6 +88,19 @@ For features that don't need network sync (local-only toggles, personal effects)
 3. **Global param names:** Use `useGlobalParam = true` on each Toggle/Radial with a namespaced name (e.g., `MyPrefab/FeatureToggle`). This is separate from the expression menu path.
 
 See **Parameter Type Matching** above for type alignment between LocalParams and VRCFury components.
+
+## Slider Toggle Clip Semantics
+
+Slider Toggles (`slider: true` on `VF.Model.Feature.Toggle`) wire the clip via `MotionTime(weight)` in `Editor/VF/Feature/ToggleBuilder.cs` -- the slider's Float param value is the **clip time** (in seconds), sampled directly from the AnimationClip curve. Behavior depends on the clip shape:
+
+**Single-keyframe clips (the common pattern):** `Editor/VF/Service/ActionClipService.cs` calls `MergeSingleFrameClips((0, empty), (1, clip))`, producing a 0..1s ramp from "no animation / shader default" to "clip value". Slider 0 = shader default, slider 1 = clip's frame-0 value, linear blend in between. In this case `defaultValue` should be `0` (slider parked at shader-default end).
+
+**Multi-keyframe clips (signed ranges, midpoint defaults, non-linear curves):** The merge is bypassed and the curve is sampled at `time = slider`. So a 2-keyframe clip with `t=0:value=A`, `t=1:value=B`, `m_StopTime=1.0` gives slider 0..1 -> shader A..B with linear interpolation. This unlocks signed-range sliders (e.g., `t=0:-0.5`, `t=1:+0.5` for a slider that maps midpoint to zero) and non-linear remaps that single-keyframe clips can't express. Set `defaultValue` to the desired resting clip-time (e.g., `0.5` to park at midpoint), and `defaultSliderValue` to the matching slider position.
+
+**Pitfalls:**
+- Always set `m_StopTime` to match the last keyframe time. The animator samples in absolute seconds; if `m_StopTime` is left at 0 (or matches a tiny frame-time like `1/60`), `PingPong` post-infinity wrapping at slider=0.5 lands at an unrelated curve value and looks broken.
+- Verify keyframe times via `AnimationUtility.GetEditorCurve` before shipping -- MCP-built clips can leave the wrong `m_StopTime` if you only use `SetEditorCurve` without explicitly setting it.
+- Verify the current `ToggleBuilder` source if behavior seems off; VRCFury internals can change between versions.
 
 ## Animation Binding Paths in VRCFury Prefabs
 
