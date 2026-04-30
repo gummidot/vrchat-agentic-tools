@@ -130,3 +130,12 @@ Use exclusive tags to make a set of toggles act as a radio group -- only one act
 **Reading/modifying existing components:** The public API is create-only. Internal types (`VF.Model.*`) can't be referenced directly in MCP snippets (they're `internal`). Use reflection to get the type (`vfAsm.GetType("VF.Model.VRCFury")`) and `SerializedObject` to read/write properties. See "Scanning Existing VRCFury Components" above.
 
 **Entry point:** `com.vrcfury.api.FuryComponents` — read source files in `Packages/com.vrcfury.vrcfury/PublicApi/` to discover available factory methods (e.g., `CreateToggle`, `CreateArmatureLink`) and their returned types' APIs.
+
+**Common FuryToggle methods:**
+- `SetMenuPath(string)` — VRC menu path
+- `SetGlobalParameter(string)` — expression parameter name
+- `SetSlider(true)` — makes a radial puppet (Float param). Takes a `bool` argument.
+- `SetDefaultOn()` — starts enabled on avatar load
+- `SetExclusiveOffState()` — this toggle re-enables when all others with the same exclusive tag turn off
+- `AddExclusiveTag(string)` — radio group tag
+- `GetActions().AddAnimationClip(clip)` — attach an animation clip to the ON state
