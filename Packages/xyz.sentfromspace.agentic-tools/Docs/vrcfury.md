@@ -51,6 +51,8 @@ Use `SerializedObject` to modify existing VRCFury components with undo support.
 
 **Usage policy:** Only use VRCFury components when the user explicitly requests it. If VRCFury would simplify a task but wasn't requested, ask the user before using it. Default to manual FX controllers + expression parameters + expression menus.
 
+**Component safety:** Never bulk-remove VRCFury components to "clean up" before adding new ones. When adding a component to a GameObject that already has VRCFury components, only add. If you need to remove something you previously created, identify it by a unique field (e.g., the `content.name` menu path) and only destroy that specific instance. Using `GetComponents()` + destroy loop wipes user-created components that cannot be recovered.
+
 **Source-first rule:** Before creating or configuring any VRCFury component:
 1. **Read the public API first** — check `PublicApi/` for a supported method. The public API is safer and handles internal details automatically.
 2. **If the public API doesn't cover the need**, fall back to `SerializedObject` — but first **read the model source** at `Runtime/VF/Model/Feature/<FeatureName>.cs` to understand all required fields, their types, and default values. Never guess at serialized field names or types.
@@ -65,6 +67,27 @@ Prefer specific actions (ObjectToggleAction, BlendShapeAction, MaterialAction, e
 ## Toggle Transition Pitfall
 
 When using `hasTransition = true`, **the ON state (`state.actions`) must not be empty** — VRCFury uses it for resting state registration, WD ON defaults, and `expandIntoTransition`. Read `Editor/VF/Feature/ToggleBuilder.cs` for the full state machine structure.
+
+## Clothing Visibility Toggles
+
+Pattern for toggles that hide a clothing mesh and reveal the body underneath:
+
+1. **Set `defaultOn: false`** -- clothing is visible in the scene's default state (mesh active, body blendshape at rest value of 100).
+2. **ObjectToggleAction with `mode = TurnOff`** -- when toggled ON, the mesh is hidden.
+3. **BlendShapeAction** targeting the body mesh with the matching blendshape set to `0` -- when toggled ON, the body is revealed.
+
+**BlendShapeAction rest-value gotcha:** VRCFury's `BlendShapeAction` only animates between the scene rest value (toggle inactive) and the action's `blendShapeValue` (toggle active). If both are the same (e.g., rest=100 and action=100), nothing happens. The scene rest value must differ from the action value.
+
+## FlipBook Material Swap Sliders
+
+Pattern for radial sliders that swap between material color variants:
+
+1. **Toggle with `slider: true`** and a `FlipBookBuilderAction` inside `state.actions`.
+2. **Each `FlipBookPage`** has a `state` containing `MaterialAction`s.
+3. **MaterialAction** references a `renderer` (the SkinnedMeshRenderer on the same mesh), a `materialIndex` (slot number), and a `GuidMaterial`.
+4. **GuidMaterial.id format:** `"{assetGUID}|{assetPath}"` (e.g., `"f5c9c34d...|Assets/CRINGY/!E-Cute by Cringy/Pan_Black.mat"`). Also set `objRef` to the Material asset reference.
+5. **Place the VRCFury component on the mesh GameObject itself**, not on a separate child or the avatar root.
+6. Page 0 should match the scene's default materials (slider value 0 = no change).
 
 ## Parameter Type Matching
 
