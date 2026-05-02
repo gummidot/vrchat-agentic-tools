@@ -431,6 +431,17 @@ class McpProxy
 
         // ── MCP config file management ──────────────────────────────────
 
+        internal static void RegenerateMcpConfigs()
+        {
+            if (s_Port == 0)
+            {
+                Debug.LogWarning("[MCP] Server is not running, cannot regenerate configs.");
+                return;
+            }
+            UpdateMcpConfigs(s_Port);
+            Debug.Log("[MCP] Regenerated MCP config files.");
+        }
+
         static void UpdateMcpConfigs(int port)
         {
             string projectRoot = Path.GetDirectoryName(Application.dataPath);
