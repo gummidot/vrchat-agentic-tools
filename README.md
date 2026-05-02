@@ -26,9 +26,8 @@ Or any other capable coding agent with MCP support
 
 **Agent configs**:
 - `AGENTS.md` / `CLAUDE.md` — detailed instructions for AI agents covering VRChat SDK, VRCFury, Poiyomi, avatar workflows, and Unity conventions
-- `.mcp.json` — MCP server config for Claude Code (auto-generated on first run)
+- `.mcp.json` — MCP server config for Claude Code, VS Code (Copilot), and other agents (auto-generated on first run)
 - `.codex/config.toml` — MCP server config for Codex (auto-generated if `.codex/` exists; create the directory first if needed)
-- `.vscode/mcp.json` — MCP server config for GitHub Copilot in VS Code (auto-generated if `.vscode/` exists)
 
 ## MCP Server
 
@@ -38,8 +37,7 @@ On startup the server:
 1. Binds to a dynamic port (tries the previous port, falls back to 14523, then OS-assigned)
 2. Compiles a lightweight stdio proxy (`Library/mcp-proxy.exe`) that bridges MCP clients to the HTTP server
 3. Auto-generates MCP config files:
-   - `.mcp.json` for Claude Code
-   - `.vscode/mcp.json` for GitHub Copilot in VS Code (only if `.vscode/` already exists)
+   - `.mcp.json` for Claude Code, VS Code (Copilot), and other agents
    - `.codex/config.toml` for Codex (only if `.codex/` already exists)
 
 The proxy reads the port from `Library/MCP_PORT` at runtime, so config files stay the same even if the port changes. It also retries during Unity domain reloads (Play Mode, script recompilation), keeping the connection alive.
