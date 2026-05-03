@@ -6,6 +6,7 @@ This is a Unity Project. We work inside the Assets folder (working directory).
 **File reads**: Freely read any file to explore assets, code, configs, YAML structure.
 **File writes**: Fallback for creating/editing `.anim`, `.controller`, `.asset`, `.mat` files when the C# API is awkward or for bulk operations. When editing YAML directly, read an existing file of the same type first to understand the structure.
 Do not create `.meta` files — Unity generates these automatically.
+**Editor scripts** must be wrapped in `#if UNITY_EDITOR` / `#endif`. Even scripts inside an `Editor/` folder with an asmdef need the guard -- the preprocessor directive is the standard VRChat SDK pattern and is more reliable than `includePlatforms` in the asmdef.
 
 **Subagent limitation**: Subagents (Explore, Plan, etc.) do NOT have access to MCP tools like `execute_csharp`. Never delegate scene exploration or Unity Editor interaction to subagents — they will try to parse `.unity` files directly, which is unreliable. Always run MCP calls in the main conversation.
 
