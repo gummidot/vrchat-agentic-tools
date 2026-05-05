@@ -2,10 +2,10 @@ When adding guidance to these docs, prefer discovery-first approaches (runtime q
 
 This is a Unity Project. We work inside the Assets folder (working directory).
 
-**Primary approach**: Use the MCP bridge (`execute_csharp`) for all scene interaction — reading hierarchy, adding components, configuring settings, creating assets.
+**Primary approach**: Use the MCP bridge (`execute_csharp`) for all scene interaction -- reading hierarchy, adding components, configuring settings, creating assets.
 **File reads**: Freely read any file to explore assets, code, configs, YAML structure.
-**File writes**: Fallback for creating/editing `.anim`, `.controller`, `.asset`, `.mat` files when the C# API is awkward or for bulk operations. When editing YAML directly, read an existing file of the same type first to understand the structure.
-Do not create `.meta` files — Unity generates these automatically.
+**File writes**: Only for `.cs` scripts and new `.anim` files created from scratch. **Never hand-edit `.prefab`, `.asset`, `.unity`, or existing `.anim` files** -- always use MCP (`execute_csharp`) with the C# API. Unity keeps loaded assets in memory and overwrites disk changes on save; hand-edits also risk YAML serialization bugs (wrong indentation, missing references, broken fileIDs).
+Do not create `.meta` files -- Unity generates these automatically.
 **Editor scripts** must be wrapped in `#if UNITY_EDITOR` / `#endif`. Even scripts inside an `Editor/` folder with an asmdef need the guard -- the preprocessor directive is the standard VRChat SDK pattern and is more reliable than `includePlatforms` in the asmdef.
 
 **Subagent limitation**: Subagents (Explore, Plan, etc.) do NOT have access to MCP tools like `execute_csharp`. Never delegate scene exploration or Unity Editor interaction to subagents — they will try to parse `.unity` files directly, which is unreliable. Always run MCP calls in the main conversation.
@@ -24,7 +24,6 @@ C# snippets run inside the Unity Editor via the MCP `execute_csharp` tool. Key d
 - Always call `EditorUtility.SetDirty(obj)` on modified objects
 - Save with `AssetDatabase.SaveAssets()` or `EditorSceneManager.SaveOpenScenes()`
 - **Never call methods that use `EditorUtility.DisplayDialog()` from MCP.** The modal dialog blocks Unity's main thread waiting for a click, but MCP can't interact with the GUI -- it hangs until the client times out and cancels. Instead, replicate the logic inline without dialogs.
-- **Don't edit loaded asset files on disk** -- Unity keeps assets in memory and overwrites disk changes on save. Use the C# API (`AssetDatabase.LoadAssetAtPath` + modify + `SetDirty` + `SaveAssets`) instead of editing `.asset` YAML directly for assets Unity has loaded.
 
 ## Workflow — Scene Exploration First
 
