@@ -435,12 +435,12 @@ class McpProxy
         {
             string projectRoot = Path.GetDirectoryName(Application.dataPath);
 
-            // .mcp.json (VS Code, Claude Code, other agents) -- uses "servers" key
+            // .mcp.json (VS Code, Claude Code, other agents) -- uses "mcpServers" key
             string mcpJsonPath = Path.Combine(projectRoot, ".mcp.json");
             if (File.Exists(ProxyExePath))
-                UpdateStdioConfigFile(mcpJsonPath, "servers");
+                UpdateStdioConfigFile(mcpJsonPath, "mcpServers");
             else
-                UpdateConfigFile(mcpJsonPath, "servers", port);
+                UpdateConfigFile(mcpJsonPath, "mcpServers", port);
 
             // .codex/config.toml (Codex) -- only if .codex/ directory exists
             string codexDir = Path.Combine(projectRoot, ".codex");
