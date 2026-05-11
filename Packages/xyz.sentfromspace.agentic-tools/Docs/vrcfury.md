@@ -78,6 +78,8 @@ Pattern for toggles that hide a clothing mesh and reveal the body underneath:
 
 **BlendShapeAction rest-value gotcha:** VRCFury's `BlendShapeAction` only animates between the scene rest value (toggle inactive) and the action's `blendShapeValue` (toggle active). If both are the same (e.g., rest=100 and action=100), nothing happens. The scene rest value must differ from the action value.
 
+**Blendshape scoping:** Each toggle should only drive blendshapes that correspond to its own mesh's body coverage area. Don't bundle unrelated blendshapes (e.g., a boots toggle should only drive the boots blendshape, not also a pants blendshape, even if both are from the same outfit package).
+
 ## FlipBook Material Swap Sliders
 
 Pattern for radial sliders that swap between material color variants:
@@ -85,9 +87,10 @@ Pattern for radial sliders that swap between material color variants:
 1. **Toggle with `slider: true`** and a `FlipBookBuilderAction` inside `state.actions`.
 2. **Each `FlipBookPage`** has a `state` containing `MaterialAction`s.
 3. **MaterialAction** references a `renderer` (the SkinnedMeshRenderer on the same mesh), a `materialIndex` (slot number), and a `GuidMaterial`.
-4. **GuidMaterial.id format:** `"{assetGUID}|{assetPath}"` (e.g., `"f5c9c34d...|Assets/CRINGY/!E-Cute by Cringy/Pan_Black.mat"`). Also set `objRef` to the Material asset reference.
+4. **GuidMaterial.id format:** `"{assetGUID}|{assetPath}"` (e.g., `"f5c9c34d...|Assets/MyPackage/Materials/MyMat.mat"`). Also set `objRef` to the loaded Material asset for reliability (some code paths use `objRef` directly).
 5. **Place the VRCFury component on the mesh GameObject itself**, not on a separate child or the avatar root.
 6. Page 0 should match the scene's default materials (slider value 0 = no change).
+7. **Type paths for reflection:** `FlipBookBuilderAction` is at `VF.Model.StateAction.FlipBookBuilderAction`. Pages are the nested type `VF.Model.StateAction.FlipBookBuilderAction+FlipBookPage` (field: `state` of type `VF.Model.State`). `GuidMaterial` is `VF.Model.GuidMaterial` (fields: `id`, `objRef`, `typeDetector`).
 
 ## Parameter Type Matching
 
@@ -152,6 +155,15 @@ Use exclusive tags to make a set of toggles act as a radio group -- only one act
 
 **Creating new components:** Use the public API — it's simpler and handles setup automatically.
 **Reading/modifying existing components:** The public API is create-only. Internal types (`VF.Model.*`) can't be referenced directly in MCP snippets (they're `internal`). Use reflection to get the type (`vfAsm.GetType("VF.Model.VRCFury")`) and `SerializedObject` to read/write properties. See "Scanning Existing VRCFury Components" above.
+
+**Toggle creation via reflection (when public API is insufficient):**
+- Component type: `VF.Model.VRCFury` (not `VRCFuryComponent` which is abstract)
+- Content assigned via: `so.FindProperty("content").managedReferenceValue = content;`
+- Must set version: `so.FindProperty("version").intValue = 3;`
+- Toggle type: `VF.Model.Feature.Toggle`
+  - Fields: `name` (string, menu path), `saved` (bool), `slider` (bool), `state` (State), `simpleOutTransition` (bool), `expandIntoTransition` (bool), `defaultOn` (bool)
+- ObjectToggleAction mode enum: TurnOn=0, TurnOff=1, Toggle=2
+- BlendShapeAction fields: `blendShape` (string), `allRenderers` (bool), `blendShapeValue` (float), `renderer` (Renderer, optional)
 
 **Entry point:** `com.vrcfury.api.FuryComponents` — read source files in `Packages/com.vrcfury.vrcfury/PublicApi/` to discover available factory methods (e.g., `CreateToggle`, `CreateArmatureLink`) and their returned types' APIs.
 
