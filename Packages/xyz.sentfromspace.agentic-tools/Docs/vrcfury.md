@@ -7,7 +7,23 @@ Ships as **pure C# source** (no DLLs).
 
 ## Component Storage
 
-VRCFury uses v3 storage: single feature in `content` field (`[SerializeReference] FeatureModel`). Legacy v2 (`config.features` list) is auto-migrated.
+VRCFury uses v3 storage: single feature in `content` field (`[SerializeReference] FeatureModel`). Legacy v2 (`config.features` list) is auto-migrated. When reading via MCP, `config.features` will be empty -- always use `SerializedObject.FindProperty("content").managedReferenceValue` to access the feature.
+
+## Component Order = Menu Order
+
+VRCFury processes components in **GameObject component order**. Menu items, toggles, and submenu entries appear in-game in the order their VRCFury components are arranged on the GameObject. If a FullController (e.g., for a submenu's radial) is the last component, its menu entries appear last in that submenu.
+
+To reorder via MCP, use `UnityEditorInternal.ComponentUtility.MoveComponentUp/Down` inside a `PrefabUtility.LoadPrefabContents`/`SaveAsPrefabAsset` block:
+
+```csharp
+var root = PrefabUtility.LoadPrefabContents(prefabPath);
+var components = root.GetComponents(vrcfuryType);
+var target = components[indexToMove];
+for (int i = 0; i < moveCount; i++)
+    UnityEditorInternal.ComponentUtility.MoveComponentUp(target);
+PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+PrefabUtility.UnloadPrefabContents(root);
+```
 
 ## Pre-Creation Conflict Check
 

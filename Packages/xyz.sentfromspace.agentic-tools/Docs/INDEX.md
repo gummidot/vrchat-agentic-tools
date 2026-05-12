@@ -24,6 +24,7 @@ C# snippets run inside the Unity Editor via the MCP `execute_csharp` tool. Key d
 - Always call `EditorUtility.SetDirty(obj)` on modified objects
 - Save with `AssetDatabase.SaveAssets()` or `EditorSceneManager.SaveOpenScenes()`
 - **Never call methods that use `EditorUtility.DisplayDialog()` from MCP.** The modal dialog blocks Unity's main thread waiting for a click, but MCP can't interact with the GUI -- it hangs until the client times out and cancels. Instead, replicate the logic inline without dialogs.
+- **Avoid C# keywords as variable names** -- `fixed`, `event`, `object`, `checked`, `base`, `params`, etc. will cause compilation errors. Use descriptive names instead (e.g., `corrected` instead of `fixed`).
 
 ## Workflow — Scene Exploration First
 
