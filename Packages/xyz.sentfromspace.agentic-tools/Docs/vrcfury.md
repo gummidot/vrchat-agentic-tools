@@ -94,6 +94,8 @@ Pattern for toggles that hide a clothing mesh and reveal the body underneath:
 
 **BlendShapeAction rest-value gotcha:** VRCFury's `BlendShapeAction` only animates between the scene rest value (toggle inactive) and the action's `blendShapeValue` (toggle active). If both are the same (e.g., rest=100 and action=100), nothing happens. The scene rest value must differ from the action value.
 
+**Reverse pattern (mesh OFF in scene):** If the mesh is disabled in the scene by default, use `ObjectToggleAction` with `mode = TurnOn` and `BlendShapeAction` with value `100` (hide body when mesh appears). The scene blendshape rest value must be `0` (body visible when mesh is inactive).
+
 **Blendshape scoping:** Each toggle should only drive blendshapes that correspond to its own mesh's body coverage area. Don't bundle unrelated blendshapes (e.g., a boots toggle should only drive the boots blendshape, not also a pants blendshape, even if both are from the same outfit package).
 
 ## FlipBook Material Swap Sliders
