@@ -108,7 +108,24 @@ Max 8 controls per menu. Control types: Button, Toggle, SubMenu, TwoAxisPuppet, 
 
 ### Contacts, Constraints & PhysBone Parameters
 
-**Dynamics inspection:** When understanding an avatar, list all contacts and constraints before creating new ones. For contacts, note collision tags, receiver types, and parameter names — these often drive interaction systems (headpats, boops, proximity toggles). For constraints, note source objects and what they achieve (world-fixed props, orbit systems, etc.).
+**Dynamics inspection:** When understanding an avatar, list all contacts and constraints before creating new ones. For contacts, note collision tags, receiver types, and parameter names -- these often drive interaction systems (headpats, boops, proximity toggles). For constraints, note source objects and what they achieve (world-fixed props, orbit systems, etc.).
+
+**Contact shapes (SDK 3.10.4+):**
+- Sphere (original), Capsule (original), **Box** (added SDK 3.10.4-beta.2, May 2026)
+- Box: width/height/depth individually adjustable, **max 6m per axis** (applied after scaling)
+- Box receivers support `Use Face Proximity`: measures distance from sender to the **positive Z face** (linear per-axis readout)
+- Multi-sender: if multiple contacts detected, receiver reports the **closest**
+- `Allow Self`: works on all shapes (receiver detects senders on same avatar)
+- `Local Only`: available on both senders and receivers; local-only contacts don't count toward perf rank (up to 256 total)
+- Receiver types: Constant (bool, always 1 when touching), OnEnter (bool, triggers once), Proximity (float 0.0-1.0)
+
+**Contact performance rank thresholds (PC):**
+| Rating | Senders | Receivers |
+|--------|---------|-----------|
+| Excellent | 4 | 4 |
+| Good | 8 | 8 |
+| Medium | 16 | 16 |
+| Poor | 24 | 24 |
 
 ### VRChat Upload-Ready Avatar Checklist
 
