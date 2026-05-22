@@ -77,3 +77,4 @@ Read these reference docs as needed based on project type and current task:
 | `./vrcfury.md` | VRCFury components, build pipeline, scanning, public API | VRCFury installed (`com.vrcfury.vrcfury` present) |
 | `./poiyomi.md` | Poiyomi shader workflow, locking, property discovery | Working with Poiyomi materials |
 | `./physbones.md` | PhysBone setup, colliders, SDK samples | Avatar project, working with PhysBones or dynamics |
+| `./vrc-contacts.md` | Contact senders/receivers, shape limits, face proximity, closest-wins, local-by-default sync model | Avatar project, working with `VRCContactSender`/`VRCContactReceiver` or designing contact-based sync |
