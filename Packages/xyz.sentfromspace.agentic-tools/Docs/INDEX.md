@@ -40,8 +40,13 @@ Start by exploring the scene hierarchy — find root GameObjects, understand the
 ## Animation Clip Binding Reference
 
 - **Blendshapes:** `EditorCurveBinding.FloatCurve("MeshPath", typeof(SkinnedMeshRenderer), "blendShape.ShapeName")`
+- **Material properties:** `EditorCurveBinding.FloatCurve("RendererPath", typeof(Renderer), "material._PropertyName")`
 - **GameObject active:** `EditorCurveBinding.FloatCurve("ObjectPath", typeof(GameObject), "m_IsActive")`
 - Always `EditorUtility.SetDirty()` on modified objects; `Undo.RecordObject()` before changes
+
+### Binding Path Must Match Target Object
+
+The `path` argument in `EditorCurveBinding.FloatCurve(path, ...)` is the hierarchy path from the **animation root** to the target object. An empty string `""` targets the root itself. If the target renderer is at `CamScreen/ScreenOverride` relative to the animation root, use that path -- not `""`. Wrong paths silently do nothing at runtime (no error, just no effect). When creating clips for VRCFury prefabs, check an existing working clip's bindings first: `AnimationUtility.GetCurveBindings(existingClip)` to see the correct path pattern.
 
 ### SetCurve vs EditorCurveBinding Gotcha
 

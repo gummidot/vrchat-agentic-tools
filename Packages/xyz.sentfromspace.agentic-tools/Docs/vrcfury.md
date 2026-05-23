@@ -190,6 +190,15 @@ Use exclusive tags to make a set of toggles act as a radio group -- only one act
 - `SetGlobalParameter(string)` — expression parameter name
 - `SetSlider(true)` — makes a radial puppet (Float param). Takes a `bool` argument.
 - `SetDefaultOn()` — starts enabled on avatar load
+- `SetSaved()` — persist value across avatar reload/world change
 - `SetExclusiveOffState()` — this toggle re-enables when all others with the same exclusive tag turn off
 - `AddExclusiveTag(string)` — radio group tag
 - `GetActions().AddAnimationClip(clip)` — attach an animation clip to the ON state
+
+**Not in public API (must edit prefab YAML):** `defaultSliderValue` -- the initial slider position. After creating the prefab, read its YAML, find `defaultSliderValue: 0` lines, and set them directly. Then `AssetDatabase.ImportAsset()` to reload.
+
+**Common FuryFullController methods:**
+- `AddParams(VRCExpressionParameters)` — declare expression parameters
+- `AddGlobalParam(string)` — make a param global (bypass VRCFury prefix scoping). Use `"*"` for all params in the asset.
+- `AddController(RuntimeAnimatorController, AnimLayerType)` — merge a controller
+- `AddMenu(VRCExpressionsMenu, string prefix)` — merge a menu
