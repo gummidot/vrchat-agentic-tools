@@ -110,6 +110,10 @@ Pattern for radial sliders that swap between material color variants:
 6. Page 0 should match the scene's default materials (slider value 0 = no change).
 7. **Type paths for reflection:** `FlipBookBuilderAction` is at `VF.Model.StateAction.FlipBookBuilderAction`. Pages are the nested type `VF.Model.StateAction.FlipBookBuilderAction+FlipBookPage` (field: `state` of type `VF.Model.State`). `GuidMaterial` is `VF.Model.GuidMaterial` (fields: `id`, `objRef`, `typeDetector`).
 
+## Toggle Serialization Order
+
+When iterating a VRCFury component's properties with `SerializedProperty.Next(true)`, the Toggle fields appear in this order: `defaultSliderValue` BEFORE `globalParam`. If you need to correlate slider values to their parameter names during iteration, cache the slider property when encountered and assign it when `globalParam` is found afterward (not the reverse).
+
 ## Parameter Type Matching
 
 A VRCFury Toggle (non-slider, `slider: 0`) creates a **Bool** parameter. If a FullController on the same prefab references a `VRCExpressionParameters` asset that declares the same parameter name as **Float**, the build will fail with: *"parameter already exists with type Float"*. Ensure the expression parameter type matches the VRCFury component that owns it: Bool for non-slider Toggles, Float for Radial Puppets and slider Toggles.

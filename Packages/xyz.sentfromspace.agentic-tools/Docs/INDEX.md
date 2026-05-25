@@ -26,6 +26,7 @@ C# snippets run inside the Unity Editor via the MCP `execute_csharp` tool. Key d
 - **Never call methods that use `EditorUtility.DisplayDialog()` from MCP.** The modal dialog blocks Unity's main thread waiting for a click, but MCP can't interact with the GUI -- it hangs until the client times out and cancels. Instead, replicate the logic inline without dialogs.
 - **Avoid C# keywords as variable names** -- `fixed`, `event`, `object`, `checked`, `base`, `params`, etc. will cause compilation errors. Use descriptive names instead (e.g., `corrected` instead of `fixed`).
 - **`InsertArrayElementAtIndex` copies field values from the adjacent element.** After inserting, explicitly set every field on the new element to the intended value. Common pitfall: `VRCAvatarParameterDriver.parameters` entries have a `type` field (0=Set, 1=Add, 2=Random, 3=Copy) that gets copied from the neighbor instead of defaulting to 0 (Set). Always set `type` explicitly after insertion.
+- **Scope `SerializedObject` per-component.** When iterating `GetComponents()` and collecting property paths, paths from one component's iteration are invalid on another component's `SerializedObject`. Either mutate via `iter.Copy()` during the same iteration pass, or create a fresh dictionary per component. Mixing paths across components causes silent data corruption.
 
 ## Workflow — Scene Exploration First
 
