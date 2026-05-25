@@ -35,12 +35,21 @@ Tag limit: 16 tags per contact component.
 To make the **owner's** locally-computed value authoritative across remote clients:
 
 1. Add the parameter to the avatar's Expression Parameters list with **Synced** checked.
-2. The owner's client writes the value via contact computation. VRChat then syncs it to remotes (including snapshot on join) like any other synced expression parameter.
-3. On remotes, their local contact computation still runs and writes the same animator parameter, but VRChat overrides it with the synced value from the owner.
+2. The owner's client writes the value via contact computation. VRChat syncs it to remotes (including snapshot on join) like any other synced expression parameter.
+3. **Set `localOnly = true` on every receiver that writes a synced parameter.** Otherwise the remote's local contact computation also runs and overwrites the synced value, frame by frame.
+
+### `localOnly` Is Required for Owner-Authoritative Sync
+
+By default `localOnly = false`, which means the receiver runs on every client (owner + remotes). For a synced parameter, the remote will then locally re-compute from its own view of the sender and write the result every frame. This fights with the owner's synced value rather than yielding to it. Two common failure modes:
+
+- **Stale geometry on remotes**: a remote's view of a sender position can lag behind reality (e.g. armature interpolation), so the remote-computed value differs from the owner-computed value and the param visibly jitters or drifts.
+- **Late-joiner with `VRCParentConstraint.FreezeToWorld`-based encoding**: when the source transform's true world position cannot be reconstructed on the remote (because `FreezeToWorld` captured at the wrong moment on the remote's spawn), the remote re-computes a value reflecting the wrong source position. The owner's correct synced value is silently overwritten each frame by the wrong local value. Symptom: the decoded position snaps onto the late-joiner's view of the avatar body instead of the encoded world position.
+
+With `localOnly = true`, the receiver only runs on the avatar owner's client. The owner writes the synced parameter; remotes receive it via sync and never overwrite it. This is the correct setting for any contact loop that produces an owner-authoritative value.
 
 If you do NOT add the parameter to synced Expression Parameters, the receiver still works but each client sees only their own local computation. This is correct for purely-local feedback (e.g. petting visual on the toucher's screen) and wrong for owner-authoritative state (e.g. a synced world-anchored position).
 
-The beta docs note "this parameter DOES NOT need to be defined on the synced Avatar Parameter list" -- this is generic guidance for the local-feedback case, not a statement that contact values are auto-synced.
+The beta docs note "this parameter DOES NOT need to be defined on the synced Avatar Parameter list" -- this is generic guidance for the local-feedback case, not a statement that contact values are auto-synced or that local writes yield to synced values.
 
 ## Performance
 
