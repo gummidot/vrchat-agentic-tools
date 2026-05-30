@@ -6,9 +6,29 @@ VRChat avatar contact senders and receivers (`VRCContactSender`, `VRCContactRece
 
 ## Shape Types and Limits
 
-- **Sphere** (default): radius cap depends on SDK version (sphere contacts historically capped at 3m radius).
-- **Capsule**: height + radius.
-- **Box** (SDK 3.10.4+): width / height / depth, capped at 6m per axis. Caps apply *after* GameObject scale, so scaling the host transform cannot widen the effective volume.
+All contact shape types share a single size clamp, documented and enforced in the SDK:
+
+> "Contact shapes are limited to a maximum **radius of 3 meters** and a maximum **height of 6 meters**. If the contact is attached to a scaled game object, **these limits are applied after scaling**."
+> — VRChat creator docs, https://creators.vrchat.com/common-components/contacts/ (`VRCContactSender` and `VRCContactReceiver` Shape sections)
+
+In practice this means **6m total extent per axis** (3m half-extent from the contact's local origin). For boxes, each axis is independently capped at 6m. Setting `size = 32` on the component, scaling the host transform, or nesting under a scaled parent does not bypass the clamp — the runtime `CollisionScene.Shape.maxSize` stays at the SDK limit.
+
+**Shape options:**
+- **Sphere** (default): radius capped at 3m.
+- **Capsule**: height + radius, same caps.
+- **Box** (SDK 3.10.4+): width / height / depth, each axis capped at 6m total extent. `Use Face Proximity` flag selects edge-of-volume vs +Z-face proximity semantics (see below).
+
+**SDK constant:** `VRC.Dynamics.ContactBase.MAX_SIZE` in `Packages/com.vrchat.base/Runtime/VRCSDK/Plugins/VRC.Dynamics.dll` (closed binary; `MAX_SIZE` / `maxSize` symbols verified via `grep -aoE` on the DLL). The literal value can be read at runtime via Unity MCP reflection:
+
+```csharp
+typeof(VRC.Dynamics.ContactBase)
+  .GetField("MAX_SIZE", BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic)
+  .GetValue(null);
+```
+
+Do not confuse with `VRCAvatarDescriptor.COLLIDER_MAX_SIZE` — that is a separate constant for AvatarDescriptor's standard colliders, not for `ContactBase`.
+
+**Implication for long-range encoders:** any design that wants to measure positions across more than 6m of range must compress on the *sender* side using a weighted multi-source `VRCParentConstraint` / `VRCPositionConstraint` (the VRLabs Custom-Object-Sync pattern: weights `1 - 3/r` and `3/r` on two sources). Receivers cannot be made bigger than the clamp.
 
 Inspect `VRCContactReceiver.shapeType` (enum) at runtime to see which shapes the installed SDK exposes.
 
