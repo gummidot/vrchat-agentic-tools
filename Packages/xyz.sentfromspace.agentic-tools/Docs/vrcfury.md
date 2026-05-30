@@ -150,6 +150,8 @@ Slider Toggles (`slider: true` on `VF.Model.Feature.Toggle`) wire the clip via `
 - Always set `m_StopTime` to match the last keyframe time. The animator samples in absolute seconds; if `m_StopTime` is left at 0 (or matches a tiny frame-time like `1/60`), `PingPong` post-infinity wrapping at slider=0.5 lands at an unrelated curve value and looks broken.
 - Verify keyframe times via `AnimationUtility.GetEditorCurve` before shipping -- MCP-built clips can leave the wrong `m_StopTime` if you only use `SetEditorCurve` without explicitly setting it.
 - Verify the current `ToggleBuilder` source if behavior seems off; VRCFury internals can change between versions.
+- Two slider Toggles on the same prefab must not drive the same material property with different `defaultSliderValue`. VRCFury rejects conflicting resting states. If two controls affect the same shader behavior, they must target different properties or one must have its clip removed.
+- A slider Toggle with empty `state.actions` is valid -- it stores a Float param value (0-1) without animating anything. Use for parameters consumed by blendtrees rather than material properties.
 
 ## Animation Binding Paths in VRCFury Prefabs
 
