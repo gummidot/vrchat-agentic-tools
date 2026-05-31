@@ -59,6 +59,18 @@ public static class SnippetRunner
             public string Result;
             public bool IsError;
             public ManualResetEventSlim Done = new ManualResetEventSlim(false);
+
+            // 0 = Pending, 1 = Running, 2 = Cancelled
+            const int Pending = 0, Running = 1, Cancelled = 2;
+            int _state;
+
+            /// <summary>Atomically transition Pending→Running. Returns true if this side won.</summary>
+            public bool TryClaimForExecution()
+                => Interlocked.CompareExchange(ref _state, Running, Pending) == Pending;
+
+            /// <summary>Atomically transition Pending→Cancelled. Returns true if this side won.</summary>
+            public bool TryCancel()
+                => Interlocked.CompareExchange(ref _state, Cancelled, Pending) == Pending;
         }
 
         static string PortFilePath => Path.Combine(Path.GetDirectoryName(Application.dataPath), "Library", "MCP_PORT");
@@ -851,6 +863,7 @@ class McpProxy
             }
             else
             {
+                item.TryCancel();
                 SendJsonResponse(resp, 504,
                     MakeToolResult(rawId, "Execution timed out (30s)", true));
             }
@@ -863,6 +876,13 @@ class McpProxy
             {
                 if (s_WorkQueue.Count == 0) return;
                 item = s_WorkQueue.Dequeue();
+            }
+
+            if (!item.TryClaimForExecution())
+            {
+                // HTTP thread already cancelled this item — skip execution
+                item.Done.Set();
+                return;
             }
 
             try
