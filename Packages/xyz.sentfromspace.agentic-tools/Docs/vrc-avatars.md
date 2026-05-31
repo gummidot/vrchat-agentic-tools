@@ -29,11 +29,13 @@ The VRC SDK ships as compiled DLLs — no readable C# source for components.
 - PhysBone reference scene: `Packages/com.vrchat.avatars/Samples/Dynamics/Robot Avatar/Avatar Dynamics Robot Avatar PC.unity`
 
 **Key C# namespaces:**
-- `VRC.SDK3.Avatars.Components` — VRCAvatarDescriptor, VRCStation
-- `VRC.SDK3.Dynamics.PhysBone.Components` — VRCPhysBone, VRCPhysBoneCollider
-- `VRC.SDK3.Dynamics.Contact.Components` — VRCContactSender, VRCContactReceiver
-- `VRC.SDK3.Dynamics.Constraint.Components` — VRCPositionConstraint, VRCRotationConstraint, etc.
-- `VRC.SDK3.Avatars.ScriptableObjects` — VRCExpressionParameters, VRCExpressionsMenu
+- `VRC.SDK3.Avatars.Components` -- VRCAvatarDescriptor, VRCStation
+- `VRC.SDK3.Dynamics.PhysBone.Components` -- VRCPhysBone, VRCPhysBoneCollider
+- `VRC.SDK3.Dynamics.Contact.Components` -- VRCContactSender, VRCContactReceiver
+- `VRC.SDK3.Dynamics.Constraint.Components` -- VRCPositionConstraint, VRCRotationConstraint, etc.
+- `VRC.SDK3.Avatars.ScriptableObjects` -- VRCExpressionParameters, VRCExpressionsMenu
+
+**ViewPosition** (`VRCAvatarDescriptor.ViewPosition`): baked at upload time. Cannot be animated at runtime. If a build-time tool changes head/eye positioning (bone scale, bone repositioning), the ViewPosition must be recalculated in the same NDMF pass or pre-upload hook.
 
 ## Avatar Logic
 
