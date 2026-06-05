@@ -916,17 +916,40 @@ class McpProxy
                 CompilerOptions = "/nostdlib"
             };
 
-            // Add assembly references (invalidate cache if assembly count changed)
+            // Collect assembly references (invalidate cache if assembly count changed)
             var currentAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
             if (s_CachedAssemblyPaths == null || s_CachedAssemblyCount != currentAssemblyCount)
             {
                 s_CachedAssemblyPaths = CollectAssemblyPaths();
                 s_CachedAssemblyCount = currentAssemblyCount;
             }
-            foreach (var path in s_CachedAssemblyPaths)
-                parameters.ReferencedAssemblies.Add(path);
 
-            CompilerResults results = provider.CompileAssemblyFromSource(parameters, source);
+            // Pass references via an mcs response file instead of the command line.
+            // Windows caps a process command line at 32767 chars; CreateProcess then
+            // fails with ERROR_FILENAME_EXCED_RANGE (206) -> "The filename or
+            // extension is too long". Large projects (VRC SDK, VRCFury, Modular
+            // Avatar, Poiyomi, ...) load enough assemblies that the combined
+            // "-r:<fullpath>" list overflows that limit. A response file keeps the
+            // real command line tiny; mcs expands @file internally. (Mono's CodeDom
+            // puts ReferencedAssemblies inline on argv, unlike .NET Framework's csc
+            // which auto-generates a response file -- hence this is Mono-specific.)
+            string rspPath = Path.Combine(Path.GetTempPath(),
+                "mcp_refs_" + Guid.NewGuid().ToString("N") + ".rsp");
+            var rsp = new StringBuilder();
+            foreach (var path in s_CachedAssemblyPaths)
+                rsp.Append("-r:\"").Append(path).Append("\"\n");
+            File.WriteAllText(rspPath, rsp.ToString(), new UTF8Encoding(false));
+            parameters.CompilerOptions += " @\"" + rspPath + "\"";
+
+            CompilerResults results;
+            try
+            {
+                results = provider.CompileAssemblyFromSource(parameters, source);
+            }
+            finally
+            {
+                try { File.Delete(rspPath); } catch { }
+            }
 
             if (results.Errors.HasErrors)
             {
