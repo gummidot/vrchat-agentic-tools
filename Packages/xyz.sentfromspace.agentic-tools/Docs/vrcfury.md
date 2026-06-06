@@ -56,6 +56,8 @@ If the target avatar has one or more VRCFury components, this applies to **all w
 - **Toggle fields:** `"content"` → `name` (menu label), `saved`, `defaultOn`, `state.actions` (array — each element's `.managedReferenceFullTypename` = action type)
 - **FullController fields:** `"content"` → `controllers` array (each has `controller.objRef`, `type`), `menus` array (`menu.objRef`), `prms` array (`parameters.objRef`)
 
+**Duplicate comparison pitfall:** VRCFury stores nearly all meaningful feature settings below the top-level `content` managed reference. Comparing only the managed-reference type (for example, `Toggle`) falsely classifies unrelated toggles as duplicates. Use `SerializedProperty.DataEquals` on each top-level serialized property so Unity deeply compares the complete managed-reference subtree, including feature fields, action arrays, targets, and values. Reports should identify components by Inspector order plus `content.name` and summarize their actions before offering removal.
+
 ## Modifying Existing VRCFury Components
 
 Use `SerializedObject` to modify existing VRCFury components with undo support.
